@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+#goes thorugh vcf and marks the number of samples sharing the insertions and recognizes if the insertion is somatic
+
 import os
 import sys, getopt
 import pysam

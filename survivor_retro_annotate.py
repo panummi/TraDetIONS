@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 
+#Script recognizes if sequence contains TE and filters out simple repeats
+
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
 from Bio import SeqIO
@@ -53,6 +55,7 @@ class SnifflesSeqAnnotator(object):
                 continue
 
             yield variant
+
     def _iter_indels(self):
         import logging as log
         import re
@@ -68,7 +71,7 @@ class SnifflesSeqAnnotator(object):
                 s = ""
             yield variant,s
 
-    def is_poly(self,seq,max_len=5):
+    def is_poly(self,seq,max_len=5):	#recognizes if sequence is a simple repeat
         from collections import Counter
         if len(seq) > 0:
             for l in range(1,max_len+1):
@@ -79,7 +82,7 @@ class SnifflesSeqAnnotator(object):
             else:
                 return False
 
-    def annotate_retros(self,retrofasta,preset="map-ont"):
+    def annotate_retros(self,retrofasta,preset="map-ont"):	#annotates transposons
         import mappy
         self.aln = mappy.Aligner(retrofasta,preset="map-ont")
         for variant in self._iter_insertions():
@@ -88,10 +91,7 @@ class SnifflesSeqAnnotator(object):
             is_poly = self.is_poly(variant.ALT[0])
             if not is_poly:
                 for aln in self.aln.map(variant.ALT[0]):
-
                     unmapped=False
-                    #if aln.is_primary:
-
                     print("{RE}\t{v.CHROM}\t{v.POS}\t{v.ID}\t{0}\t{v.ALT[0]}".format(str(aln),RE=RE,v=variant))
                 if unmapped or True:
                     print(RE,str(variant).strip())
@@ -99,7 +99,7 @@ class SnifflesSeqAnnotator(object):
                 print("{RE}\t{v.CHROM}\t{v.POS}\t{v.ID}\t{0}\t{v.ALT[0]}".format(is_poly,RE=RE,v=variant))
 
 
-    def to_annotated_vcf(self,retrofasta,out_vcf,preset="map-ont",filter_fn=lambda v:True):
+    def to_annotated_vcf(self,retrofasta,out_vcf,preset="map-ont",filter_fn=lambda v:True):	#produces output vcf
         import mappy
         import logging as log
         self.aln = mappy.Aligner(retrofasta,preset="map-ont", k=11, w=6)
@@ -126,26 +126,17 @@ class SnifflesSeqAnnotator(object):
 
         for variant,allele in self._iter_indels():
             unmapped=True
-#            print(variant)
             RE=variant.INFO.get("RE")
-            #try:
-            #    ref_f,ref_r = variant.INFO.get("REF_strand")
-            #except TypeError as e:
-            #    ref_f,ref_r = 0, 0
-
-            if RE is not None and RE < 3:# or ref_f+ref_r < 3:
-                #log.info("Skipping {}".format(str(variant).strip()))
+            if RE is not None and RE < 3:
                 continue
             is_poly = self.is_poly(allele)
             if is_poly is False:
-#                is_poly = "False"
                 bestscore=int(0)
                 primary=0
                 for aln in self.aln.map(allele):
                    if aln.is_primary:
                       primary=1
                       if aln.mapq >= bestscore:
-                      #print(aln)
                         bestscore=aln.mapq
                         unmapped=False
                         SVclass=aln.ctg.split("#")[-1]
@@ -154,16 +145,10 @@ class SnifflesSeqAnnotator(object):
                         TE_length=aln.q_en-aln.q_st
                         if FLANKINGstart < 200 and FLANKINGend < 200:
                           POSITION="whole"
-                  #     variant.INFO["POSITION"] = "whole"
-                  #     print("piip1")
                         elif FLANKINGstart < 200:
                           POSITION="beginning"
-                  #     variant.INFO["POSITION"] = "beginning"
-                  #     print("piip2")
                         elif FLANKINGend < 200:
-                          POSITION="end"  
-                  #     variant.INFO["POSITION"] = "end"
-                  #     print("piip3")
+                          POSITION="end"
                         else:
                           POSITION="middle"
                 if primary == 1:
@@ -176,28 +161,9 @@ class SnifflesSeqAnnotator(object):
                 variant.INFO["poly"] = str(is_poly)
 
 
-    def to_fasta(self,out_file):
-        import logging as log
-
-        lengths = []
-
-        for variant,allele in self._iter_indels():
-
-            out_file.write(">{v.CHROM}_{v.POS}_{v.ID}_{len}\n{seq}\n".format(v=variant,
-                        seq=allele,len=len(allele)))
-            lengths.append(len(allele))
-        out_file.flush()
-        return lengths
-
-
 if __name__ == '__main__':
     args=main()
-   # args.input.header.formats.add("Position",".","String","Location of transposon in the query")
     annot = SnifflesSeqAnnotator(args.input)
-   # fasta = args.output + ".fa"
-   # if args.annot is None:
-   #     l = annot.to_fasta(open(fasta,"w"))
-   # else:
     import sys
     vcf = args.output + ".vcf"
     annot.to_annotated_vcf(args.annot, vcf)

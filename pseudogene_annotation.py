@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+## Script takes one insertion at a time and annotates it for pseudogenes the polished sequence of it
+
 import os
 import sys, getopt
 from typing import Sequence
@@ -8,7 +10,6 @@ import pysam
 import subprocess
 from functools import lru_cache
 from collections import defaultdict
-#from cyvcf2 import VCF
 from pathlib import Path
 from collections import namedtuple
 import mappy
@@ -17,7 +18,7 @@ from operator import attrgetter
 from operator import itemgetter
 import tempfile
 
-def read_is_target(read, coordinate):
+def read_is_target(read, coordinate):	#checks if read overlaps target
     q_start = read.reference_start
     q_chr = read.reference_name
     c_chr = coordinate.split(':')[0]
@@ -27,7 +28,7 @@ def read_is_target(read, coordinate):
     else:
         return False
 
-def tsd_rec(targets):
+def tsd_rec(targets):	#recognizes target site duplication/deletion by target overlap
     first=targets[0]
     second=targets[0]
     tsdtype=''
@@ -54,7 +55,6 @@ def tsd_rec(targets):
     elif size < 0:
         tsdtype="target_site_deletion"
         contig1=tsd_in_contig(second, 0, 0)
-#        contig2=tsd_in_contig(first, len(first.query_alignment_sequence)-size, ))
         list_contig=[contig1]
         coordinates = first.reference_name + ":"  + str(first.reference_end) + "-" + str(second.reference_start)
         if contig1 is None:
@@ -63,7 +63,7 @@ def tsd_rec(targets):
         return None
     return coordinates, list_contig, tsdtype
 
-def tsd_in_contig(read, start, end):
+def tsd_in_contig(read, start, end):	#gets tsd position in contig
     count = 0
     clipped = 0
     for a in read.cigartuples:
@@ -74,7 +74,7 @@ def tsd_in_contig(read, start, end):
         if count >= end:
             return(clipped + start, clipped + end)
 
-def recognize_parts(samfile, coordinates):
+def recognize_parts(samfile, coordinates):	#annotates contig parts to insertion and target
     target=[]
     insertion=[]
     for read in samfile:
@@ -85,19 +85,19 @@ def recognize_parts(samfile, coordinates):
     return target, insertion
 
 
-def recognize_polys(fasta, target_breakpoints):
+def recognize_polys(fasta, target_breakpoints):	#goes thorugh sequence and picks polytails near insertion breakpoints
     all_polys = []
     for a in fasta.references:
         sequence = fasta.fetch(a)
         letters = ("a","t")
-        for letter in letters:   
+        for letter in letters:
             polys=is_poly(sequence, letter)
             for poly in polys:
                 if near_breakpoint(poly, target_breakpoints, 10):
                     all_polys.append(poly)
         return(all_polys)
 
-def EN_cutsite_rec(fasta, encs, annotation):
+def EN_cutsite_rec(fasta, encs, annotation):	#recognizes EN cutsites
     encs_list=[]
     insertions=[]
     limit=10
@@ -109,8 +109,6 @@ def EN_cutsite_rec(fasta, encs, annotation):
                 break
             except ValueError:
                 minus=minus+1
-                
-#        sequence = fasta.fetch(a, 0, fasta.lengths[0]-533)
     for a in annotation:
         if a.type == "insertion":
             insertions.append([a.start, a.end])
@@ -130,15 +128,7 @@ def EN_cutsite_rec(fasta, encs, annotation):
             largest_en=item
     return largest_en
 
-#    return(encs)
-
-def encuts(sequence, encs_fasta):
-    list_ens=[]
-    for a in encs_fasta:
-        list_ens.append([sequence.index(a), sequence.index(a)+len(a), a])
-    return list_ens
-
-def retros(sequence, retrofasta, annot):
+def retros(sequence, retrofasta, annot):	 #recognizes TE sequence
     a = mappy.Aligner(sequence)
     insertions = []
     for part in annot:
@@ -149,7 +139,6 @@ def retros(sequence, retrofasta, annot):
         sys.exit("ERROR: failed to load/build index")
     for name, seq, qual in mappy.fastx_read(retrofasta):
         for hit in a.map(seq):
-        
             for ins in insertions:
                 if ((hit.r_st - ins[0] > -100 and hit.r_st < ins[1]) and (hit.r_en > ins[0] and hit.r_en - ins[1] < 100)) or ((hit.r_st - ins[1] > -0 and hit.r_st < ins[0]) and (hit.r_en > ins[1] and hit.r_en -ins[0] < 100)):
                     if hit.strand == +1:
@@ -161,7 +150,7 @@ def retros(sequence, retrofasta, annot):
                     return(name, hit.r_st, hit.r_en, hit.q_st+1, hit.q_en+1, strand)
 
 
-def pseudos(sequence, pseudofasta, annot):
+def pseudos(sequence, pseudofasta, annot, qualification):	#annotates pseudogenes
     insertions = []
     for part in annot:
         if part.type == "insertion":
@@ -172,12 +161,10 @@ def pseudos(sequence, pseudofasta, annot):
     os.system("minimap2 " + sequence + " " + pseudofasta + " > " + output.name)
     samput = tempfile.NamedTemporaryFile()
     os.system("minimap2 " + sequence + " " + pseudofasta + " -a > " + samput.name)
-#    os.system("minimap2 " + sequence + " " + pseudofasta + " -a")
 
     f = open(output.name,'r')
     lines = f.readlines()
     for line in lines:
-        #print(line)
         splits=line.split('\t')
         q_st=int(splits[2])
         q_en=int(splits[3])
@@ -188,88 +175,56 @@ def pseudos(sequence, pseudofasta, annot):
         alignment_score=" "
         for ins in insertions:
            if ((r_st - ins[0] > -100 and r_st < ins[1]) and (r_en > ins[0] and r_en - ins[1] < 100)): 
-#or ((r_st - ins[1] > -0 and r_st < ins[0]) and (r_en > ins[1] and r_en -ins[0] < 100)):
               print(splits[0])
               asout = (subprocess.check_output("grep " + splits[0] + " " + samput.name + " | tail -n1 | cut -f14 | cut -d':' -f3", shell=True)).strip()
               if asout==b'':
                   asout=0
               pseudos.append(Pseudo(splits[0], r_st, r_en, q_st+1, q_en+1, strand, mapq, int(asout)))
-#    samput = tempfile.NamedTemporaryFile()
-#    os.system("minimap2 " + pseudofasta + " " + sequence + " -a > " + samput.name)
-    print(pseudos)
-
     output.close()
-    bestpseudo = select_pseudo(pseudos)
+    if qualification == "score":
+        bestpseudo = select_pseudo_s(pseudos)
+    if qualification == "length":
+        bestpseudo = select_pseudo_l(pseudos)
     return(bestpseudo)
-#    a = mappy.Aligner(sequence)
-#    insertions = []
-#    for part in annot:
-#        if part.type == "insertion":
-#            insertions.append([part.start, part.end])
-#    if not a:
-#        raise Exception("ERROR: failed to load/build index")
-#        sys.exit("ERROR: failed to load/build index")
 
-
-
-#    for name, seq, qual in mappy.fastx_read(pseudofasta):
-#        for hit in a.map(seq):
-  #  for hit in str(minioutput):
-  #      print(hit)
-            #print(name)
-#            print(hit)
- #           for ins in insertions:
-                #print(ins)
-                #print(hit.r_st)
-                #print(hit.r_en)
-#                if ((hit.r_st - ins[0] > -100 and hit.r_st < ins[1]) and (hit.r_en > ins[0] and hit.r_en - ins[1] < 100)) or ((hit.r_st - ins[1] > -0 and hit.r_st < ins[0]) and (hit.r_en > ins[1] and hit.r_en -ins[0] < 100)):
-#                    if hit.strand == 1:
-#                        strand="+"
-#                    elif hit.strand == -1:
-#                        strand="-"
-#                    else:
-#                        strand="."
-#            #        print("matches")
-#                    pseudos.append(Pseudo(name, hit.r_st, hit.r_en, hit.q_st+1, hit.q_en+1, strand, hit.mapq, hit.is_primary))
-#    bestpseudo = select_pseudo(pseudos)
-#    return(bestpseudo)
-
-def select_pseudo(pseudos):
+def select_pseudo_s(pseudos):	#selects best pseudogene based on score
     bmapq=0
-    #print(pseudos)
     for p in pseudos:
-    #    print(p)
         if p.mapq > bmapq:
             bmapq = p.mapq
     bscore=0
     best=''
-    #print(bmapq)
     for p in pseudos:
-#        print("JOU")
- #       print(p)
         if p.mapq == bmapq:
-#            print(p)
-    #        print(p.end_r-p.start_r)
             if p.alignment_score > bscore:
                 bscore = p.alignment_score
-            #    blength = p.end_r-p.start_r
-    #        if p.is_primary:
                 best = p
-        #print(blength)
     return(best)
 
- 
+ def select_pseudo_l(pseudos):	#selects best pseudogene based on length
+    bmapq=0
+    for p in pseudos:
+        if p.mapq > bmapq:
+            bmapq = p.mapq
+    blength=0
+    best=''
+    for p in pseudos:
+        if p.mapq == bmapq:
+            if p.alignment_score > bscore:
+                blength = p.end_r-p.start_r
+                best = p
+    return(best)
 
 
-def near_breakpoint(object, target_breakpoints, limit):
+def near_breakpoint(object, target_breakpoints, limit):	#checks if object is within limit of target breakpoints
     near = False
     for part in target_breakpoints:
         if abs(part - object[0]) <  limit or abs(part - object[1]) < limit:
             near = True
     return near
-            
 
-def is_poly(seq, tail_letter):
+
+def is_poly(seq, tail_letter):	#recognizes poly(A/T)-tails from the contig
     nullpos = 0
     maxval = 0
     maxpos=0
@@ -290,7 +245,7 @@ def is_poly(seq, tail_letter):
             maxpos=index
     return tails
 
-def target_read_insertions(target):
+def target_read_insertions(target):	#goes through contig that are mapped toreference and recognizes insertions inside them
     count=0
     first_target=0
     second_target=0
@@ -315,7 +270,7 @@ def target_read_insertions(target):
     insertion=[first_target,second_target,"insertion", "."]
     return target1, insertion, target2
 
-def find_insertions(annotation_of_contig, length_of_c):
+def find_insertions(annotation_of_contig, length_of_c):	#recognizes insertions from the contig
     prevend=1
 
     annotation_insertions=[]
@@ -325,10 +280,10 @@ def find_insertions(annotation_of_contig, length_of_c):
                 annotation_insertions.append([prevend + 1, a.start - 1])
             prevend=a.end
     if length_of_c - prevend > 100:
-        annotation_insertions.append([prevend + 1, length_of_c])        
+        annotation_insertions.append([prevend + 1, length_of_c])
     return annotation_insertions
 
-def get_sequence(coordinates, name, fasta, read_fasta):
+def get_sequence(coordinates, name, fasta, read_fasta):	
     sequence = (fasta.fetch(name, coordinates[0], coordinates[1]))
     read_fasta.write(">" + name + "" + str(coordinates[0]) + "" + str(coordinates[1]) + "\n")
     read_fasta.write(sequence + "\n")
@@ -345,7 +300,6 @@ def realign(read, parts, fasta, reference, breakpoint, outputdir):
     a = mappy.Aligner(outputdir + read.query_name +".fasta")
     if not a:
         raise Exception("ERROR: failed to load/build index")
-#        sys.exit("ERROR: failed to load/build index")
     chr = breakpoint.split(':')[0]
     bp = int(breakpoint.split(':')[1])
     hits=[]
@@ -366,7 +320,7 @@ def realign(read, parts, fasta, reference, breakpoint, outputdir):
         else:
             second_hit=hit1[4]
     size=first_hit.q_en-second_hit.q_st
-    if size > 0:        
+    if size > 0:
         tsdtype="target_site_duplication"
         contig1=tsd_in_contig_mappy(second_hit.cigar, second_hit.r_st+second_part[0], second_hit.r_st+size+second_part[0], second_part[0])
         contig2=tsd_in_contig_mappy(first_hit.cigar, first_hit.r_en-size, first_hit.r_en, second_part[0])
@@ -376,7 +330,6 @@ def realign(read, parts, fasta, reference, breakpoint, outputdir):
             return None
     elif size < 0:
         tsdtype="target_site_deletion"
-        #contig1=tsd_in_contig_mappy(second_hit.cigar, 0, 0, 0)
         contig1=(parts[0]+read.query_alignment_start+1, parts[0]+read.query_alignment_start+1)
         list_contig=[contig1]
         coordinates = chr + ":"  + str(first_hit.q_en) + "-" + str(second_hit.q_st)
@@ -385,8 +338,7 @@ def realign(read, parts, fasta, reference, breakpoint, outputdir):
 
     return hits, [coordinates, list_contig, tsdtype]
 
-def tsd_in_contig_mappy(cigar, start, end, previous):
-
+def tsd_in_contig_mappy(cigar, start, end, previous):	#return tsd coordinates in contig
     count = previous
     clipped = 0
     for a in cigar:
@@ -397,9 +349,8 @@ def tsd_in_contig_mappy(cigar, start, end, previous):
             count = count + a[0]
         if count >= end:
             return(clipped + start, clipped + end)
-    
 
-def aligned_part(target):
+def aligned_part(target):	#returns target coordinates
     count=0
     start=0
     end=0
@@ -414,14 +365,14 @@ def aligned_part(target):
             count = count + cigar[1]
     if end == 0:
         end = count
-    return start, end 
+    return start, end
 
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "hf:s:o:p:r:g:")
+        opts, args = getopt.getopt(argv, "hf:s:o:p:r:g:q:c:")
     except getopt.GetoptError:
-        print("insertion_annotation.py [-S] -s <sam> -f <fasta> -p <position> -r <retrotransposon fasta>  -o <output>")
+        print("insertion_annotation.py [-S] -s <sam> -f <fasta> -p <position> -r <retrotransposon fasta> -o <output> -c <cDNAfasta> -q <pseudogene selection (score/length)> -g <reference genome>")
         sys.exit(2)
     for opt, arg in opts:
         if opt == "-h":
@@ -437,19 +388,22 @@ def main(argv):
             retrofasta = arg
         elif opt in ("-o"):
             outputfile = arg
-        elif opt in ("-g"):
+        elif opt in ("-c"):
             pseudofasta = arg
+        elif opt in ("-q"):
+            qualification = arg
+        elif opt in ("-g"):
+            reference_genome = arg
+
 
     output = open(outputfile, "w+")
-
-    reference_genome="/mnt/cg8/reference-genomes/GRCh38_no_alt/GRCh38_no_alt.fasta"
     outputdir=fasta.split('q/', 1)[0]+"q"
     fastafile = pysam.FastaFile(fasta)
     breakpoint = position
     samfile=pysam.AlignmentFile(sam, "rb")
     annotation_of_contig = []
 
-    parts = recognize_parts(samfile, breakpoint)
+    parts = recognize_parts(samfile, breakpoint)	#recognize insertions and target annotations
     targets=parts[0]
     insertions=parts[1]
     if parts == ([],[]):
@@ -457,8 +411,6 @@ def main(argv):
         exit()
     endonuclease_cuts=[["TTTT","A"], ["T","AAAA"], ["TTTT","G"], ["C","AAAA"], ["TTTC","A"], ["T","GAAA"]]
 
-#    print(parts)
-    
     alignments=parts[0]
     if alignments:
         read=alignments[0]
@@ -467,10 +419,9 @@ def main(argv):
 
 
     Part = namedtuple('Part', 'type contig start end content score strand')
-    realigned_parts = None 
+    realigned_parts = None
 
-
-    for target in targets:
+    for target in targets:	#get target coordinates
         if target.is_reverse:
            reverse="-"
         else:
@@ -479,7 +430,7 @@ def main(argv):
         insertion_in_target = target_read_insertions(target)
         for parts in insertion_in_target:
             if parts[2] == "insertion" and parts[1] != 0:
-                realigned_parts=realign(target, parts, fastafile, reference_genome, breakpoint, outputdir)            
+                realigned_parts=realign(target, parts, fastafile, reference_genome, breakpoint, outputdir)
         if insertion_in_target[0][1] != 0:
             if realigned_parts:
                 for p in realigned_parts[0]:
@@ -489,11 +440,9 @@ def main(argv):
                     if part[2] == "insertion":
                         annotation_of_contig.append(Part(part[2], target.query_name, part[0], part[1], part[3], ".", "."))
                     else:
-                        annotation_of_contig.append(Part(part[2], target.query_name, part[0], part[1], part[3], target.mapq, reverse))            
-
+                        annotation_of_contig.append(Part(part[2], target.query_name, part[0], part[1], part[3], target.mapq, reverse))
         else:
             annotation_of_contig.append(Part("target", target.query_name, aligned_target[0], aligned_target[1], target.reference_name + ":" + str(target.reference_start) + "-" + str(target.reference_end), target.mapq, reverse))
-    
     target_limits=[]
     for part in annotation_of_contig:
         if part.type == "target":
@@ -501,7 +450,6 @@ def main(argv):
                 target_limits.append(part.start)
             if part.end != fastafile.lengths[0]:
                 target_limits.append(part.end)
-
 
 
     if targets:
@@ -513,7 +461,7 @@ def main(argv):
                     if part2[1] != fastafile.lengths[0] and part2[1] != 0:
                        target_limits.append(part2[1])
 
-    if insertions:
+    if insertions:	#insertion coordinates
         for insertion in insertions:
             if insertion.is_reverse:
                reverse="-"
@@ -524,15 +472,13 @@ def main(argv):
 
 
     annotation_of_contig = sorted(annotation_of_contig, key=lambda x: x.end)
-    annotation_of_contig = sorted(annotation_of_contig, key=lambda x: x.start)    
+    annotation_of_contig = sorted(annotation_of_contig, key=lambda x: x.start)
 
-#    print(fastafile.lengths)
-    new_insertions = find_insertions(annotation_of_contig, fastafile.lengths[0])
+    new_insertions = find_insertions(annotation_of_contig, fastafile.lengths[0])	 #find smaller insertions from sam aligments
     for new_insertion in new_insertions:
         annotation_of_contig.append(Part("insertion", read.query_name, new_insertion[0], new_insertion[1], ".", ".", "."))
-      
- 
-    if len(targets) > 1:
+
+    if len(targets) > 1:	#annotate TSDs
         tsd = tsd_rec(targets)
         if tsd is not None:
             for tsdpart in tsd[1]:
@@ -546,9 +492,9 @@ def main(argv):
 
 
 
-    retrotransposons=retros(fasta, retrofasta, annotation_of_contig)
+    retrotransposons=retros(fasta, retrofasta, annotation_of_contig)	#annotate TE sequence
 
-    pseudogenes=pseudos(fasta, pseudofasta, annotation_of_contig)
+    pseudogenes=pseudos(fasta, pseudofasta, annotation_of_contig, qualification)
 
     if retrotransposons:
         annotation_of_contig.append(Part("transposon", read.query_name, retrotransposons[1], retrotransposons[2], retrotransposons[0] + ":" + str(retrotransposons[3]) + "-" + str(retrotransposons[4]), ".", retrotransposons[5]))
@@ -558,12 +504,12 @@ def main(argv):
         annotation_of_contig.append(Part("pseudogene", read.query_name, pseudogenes[1], pseudogenes[2], pseudogenes[0] + ":" + str(pseudogenes[3]) + "-" + str(pseudogenes[4]), str(pseudogenes[6]), pseudogenes[5]))
 
 
-    cuts = EN_cutsite_rec(fastafile, endonuclease_cuts, annotation_of_contig)
+    cuts = EN_cutsite_rec(fastafile, endonuclease_cuts, annotation_of_contig)	#annotate EN cutsites
     if cuts:
         annotation_of_contig.append(Part("endonuclease_cut_site", read.query_name, cuts[2], cuts[3], cuts[0], ".", "."))
         annotation_of_contig.append(Part("endonuclease_cut_site", read.query_name, cuts[4], cuts[5], cuts[1], ".", "."))
 
-    polys = recognize_polys(fastafile, target_limits)
+    polys = recognize_polys(fastafile, target_limits)	  #annotate poly-tails
     if polys:
         for poly in polys:
             if poly[2] == "a":
@@ -571,12 +517,11 @@ def main(argv):
             if poly[2] == "t":
                 annotation_of_contig.append(Part("polyT", read.query_name, poly[0], poly[1], poly[3], ".", "."))
 
- #       annotation_of_contig.append(Part(, read.query_name, cuts[2], cuts[3], cuts[0], ".", "."))
 
     annotation_of_contig = sorted(annotation_of_contig, key=lambda x: x.end)
     annotation_of_contig = sorted(annotation_of_contig, key=lambda x: x.start)
 
-    print(annotation_of_contig)
+    #write annotation to bed file
 
     output.write("#chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tcontent\n")
 
@@ -586,4 +531,3 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-

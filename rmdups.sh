@@ -1,11 +1,9 @@
 #!/bin/bash
 
-#samples=$("ls /mnt/cg38/Paivi/sv_analysis/reads/*bam")
+#script that removes duplicates of reads
+$1=dir
 
-for f in /mnt/cg38/Paivi/new_runs/pseudogenes/reads/*sorted.map-ont.bam; do
+for f in $dir/*sorted.map-ont.bam; do
 	sample=$(echo $f | cut -f1,2,3 -d'.')
-	echo $sample
-
-samtools rmdup -s $f $sample"_rm.bam"
-
+	samtools rmdup -s $f $sample"_rm.bam"
 done

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+#Script merges TEs in a vcf file
+
 import os
 import sys, getopt
 from typing import Sequence
@@ -16,7 +18,7 @@ import logging as log
 from operator import attrgetter
 from operator import itemgetter
 
-def get_te_class(te_type):
+def get_te_class(te_type):	#return TE class for different TE subtypes
     te_class=''
     if te_type.startswith("Alu"):
         te_class="Alu"
@@ -48,7 +50,7 @@ def get_te_class(te_type):
         te_class=te_type
     return(te_class)
 
-def retros(sequence, retrofasta):
+def retros(sequence, retrofasta):	#identify TE sequence
     a = mappy.Aligner(retrofasta,preset="map-ont", k=11, w=6)
     if not a:
         raise Exception("ERROR: failed to load/build index")
@@ -67,25 +69,14 @@ def retros(sequence, retrofasta):
     return(te_class, te_start, te_end, strand, besthit.mapq)
 
 
-def get_info(v, TE_single, TE_cluster):
-    list_of_TE_info = retros(v.alts[0], "/mnt/cg8/Päivi/databases/hg38reps.html")
+def get_info(v, TE_single, TE_cluster, retrodata):	#returns info about individual insertion and insertion cluster
+    list_of_TE_info = retros(v.alts[0], retrodata)
     single = TE_single(v.chrom, v.pos, list_of_TE_info[0], list_of_TE_info[2] - list_of_TE_info[1], list_of_TE_info[3], v.id, v, list_of_TE_info[4])
     cluster = TE_cluster(v.chrom, v.pos, v.pos, list_of_TE_info[0], list_of_TE_info[2] - list_of_TE_info[1], list_of_TE_info[2] - list_of_TE_info[1], list_of_TE_info[3], [v.id], [v], [single])
     return single, cluster
 
-def closest_variant(a, b):
-    if b[0] is None and a[0] is None:
-        return  None
-    elif b[0] is None:
-        return a
-    elif a[0] is None:
-        return b
-    elif abs(a[0]) >= abs(b[0]):
-        return b
-    else:
-        return a
 
-def matchnumbers(a, b1, b2, limit, comparison):
+def matchnumbers(a, b1, b2, limit, comparison):	#check if insertions fill all merging criteria
     if (a > b1 and a < b2):
         return True
     if comparison == "pos" and (abs(a - b2) < limit) or (abs(a - b1) < limit):
@@ -95,19 +86,19 @@ def matchnumbers(a, b1, b2, limit, comparison):
     else:
         return False
 
-def comparenear(a,b):
+def comparenear(a,b):	#check if insertions are close
     if a.chr == b.chr and matchnumbers(a.pos,b.minpos,b.maxpos, 40, "pos"):
         return True
     else:
         return False
 
-def compare(a, b):
+def compare(a, b):	#check if insertions lengths match
     if a.type == b.type and a.strand == b.strand and matchnumbers(a.length,b.minlength,b.maxlength, 0.75, "length") and a.variant_id not in b.variant_ids:
         return True
     else:
         return False
 
-def make_cluster(a, cluster, TE_cluster):
+def make_cluster(a, cluster, TE_cluster):	#makes cluster of insertions
     te_id_list = cluster.variant_ids.copy()
     te_id_list.append(a.variant_id)
     te_list = cluster.variants.copy()
@@ -132,7 +123,7 @@ def make_cluster(a, cluster, TE_cluster):
         maxlength = cluster.maxlength
     return(TE_cluster(a.chr, minpos, maxpos, a.type, minlength, maxlength, a.strand, te_id_list, te_list, single_list))
 
-def merge_output(cluster, soma, germl):
+def merge_output(cluster, soma, germl):	#create output for merged variant cluster
     id=""
     if len(cluster.variant_ids) > 1:
         id="G_"+str(germl)
@@ -190,22 +181,16 @@ def merge_output(cluster, soma, germl):
         S=v.info['S']+S
         TG=v.info['TG']+TG
         TA=v.info['TA']+TA
-        
         for s in v.samples:
             if v.samples[s] != variant.samples[s]:
                 if v.samples[s]['GT'] != (None, None):
                     for w in v.samples[s]:
                         if type(variant.samples[s][w]) == str and  type(v.samples[s][w]) == tuple:
                             variant.samples[s][w] = v.samples[s][w][0]
-                #            newtype = type(variant.samples[s][w])(v.samples[s][w])
-                #            if type(newtype) == type(variant.samples[s][w]):
-                # 
-                #                variant.samples[s][w] = newtype
                         else:
                             variant.samples[s][w] = v.samples[s][w]
         if v.stop:
             endsum=v.stop + endsum
-        
 
     variant.id = id
     variant.pos=int(sum/i)
@@ -216,26 +201,25 @@ def merge_output(cluster, soma, germl):
     variant.info.__setitem__('TE_MAPQ', str(bestmapq))
     return(variant, soma, germl, [id, TES[:-1]])
 
-#def sort_by_chrom(list)
-
-
 
 def main(argv):
     outputfile=''
     inputl=''
     try:
-        opts, args = getopt.getopt(argv, "hi:o:")
+        opts, args = getopt.getopt(argv, "hi:o:r:")
     except getopt.GetoptError:
-        print("insertion_annotation.py -i <inputvcf> -o <output>")
+        print("insertion_annotation.py -i <inputvcf> -o <output> -r <fasta of repeats>")
         sys.exit(2)
     for opt, arg in opts:
         if opt == "-h":
-            print("test.py -c <cram> -i <inputputlist>")
+            print("test.py -c <cram> -i <inputputlist> -r <fasta of repeats>"")
             sys.exit()
         elif opt in ("-i"):
             inputl = arg
         elif opt in ("-o"):
             outputfile = arg
+        elif opt in ("-r"):
+            retrodata = arg
 
 
     list_of_singles=[]
@@ -252,16 +236,11 @@ def main(argv):
 
         for v in vcf:
             i=i+1
-            #if i > 300:
-            #    break
-            TE_tuples = get_info(v, TE_single, TE_cluster)
+            TE_tuples = get_info(v, TE_single, TE_cluster, retrodata)
             list_of_singles.append(TE_tuples[0])
             list_of_clusters.append(TE_tuples[1])
             print(v.id)
 
-
-#    sort_by_chrom(list_of_singles)
-#    sort_by_chrom(list_of_clusters)
     list_of_singles=sorted(list_of_singles, key=attrgetter('pos'))
     list_of_singles=sorted(list_of_singles, key=attrgetter('chr'))
 
@@ -271,12 +250,9 @@ def main(argv):
     change=0
     old_clusters=[]
     in_clusters=[]
-    #    change=0
     new_clusters=[]
     counter = 0
     while counter < len(list_of_singles)-1:
-#        print("TÄHÄN VERRATAAN")
-#        print(list_of_singles[counter].variant_id)
         compare_p=list_of_clusters[counter]
         if list_of_singles[counter].variant_id in in_clusters:
             counter = counter+1
@@ -286,11 +262,9 @@ def main(argv):
         while True:
             if comparenear(list_of_singles[counter+inside_counter], compare_p):
                 if compare(list_of_singles[counter+inside_counter], compare_p):
-#                    print("Täs")
                     new_cluster = make_cluster(list_of_singles[counter+inside_counter], compare_p, TE_cluster)
                     compare_p=new_cluster
                 inside_counter = inside_counter+1
-    #            print(inside_counter+counter)
                 if inside_counter+counter >= len(list_of_singles):
                     break
             else:
@@ -309,9 +283,6 @@ def main(argv):
         merged, soma, germl, merged_info = merge_output(best, soma, germl)
         output.write(merged)
         new_info.write(merged_info[0] + "\t" + merged_info[1] + "\n")
-
-
-           
 
 if __name__ == "__main__":
     main(sys.argv[1:])
