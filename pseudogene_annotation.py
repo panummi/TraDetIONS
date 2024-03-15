@@ -201,7 +201,7 @@ def select_pseudo_s(pseudos):	#selects best pseudogene based on score
                 best = p
     return(best)
 
- def select_pseudo_l(pseudos):	#selects best pseudogene based on length
+def select_pseudo_l(pseudos):	#selects best pseudogene based on length
     bmapq=0
     for p in pseudos:
         if p.mapq > bmapq:

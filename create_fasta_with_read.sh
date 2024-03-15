@@ -15,14 +15,16 @@ if [[ $line == \#* ]]; then
 fi
 id=$(echo $line | cut -f3 -d' ')
 echo $id
-mkdir $outputdir/redone/$index
+echo $index
+mkdir -p $outputdir/redone
+mkdir -p $outputdir/redone/$index
 rm $outputdir/redone/$index/$id.fq
 for f in $outputdir/reads_in_insertions/*/$id.txt;	#extract supporting reads and makes a fq file
 	do
 	sample=$(echo ${f} | rev | cut -f1,2 -d '/' | rev | cut -f1 -d'/')
 	echo $f
 	echo  $outputdir/$sample".fastq"
-	grep -A3 -f $f <(samtools fastq $outputdir/$sample".sorted.map-ont_rm.bam") | sed '/^--$/d' >> $outputdir/redone/$index/$id.fq
+	grep -A3 -f $f <(samtools fastq $outputdir/$sample*"_rm.bam") | sed '/^--$/d' >> $outputdir/redone/$index/$id.fq
 	done;
 echo $outputdir/reads_in_insertions/*/$id".txt_largest.txt"
 for best in $outputdir/reads_in_insertions/*/$id".txt_largest.txt";	#get the median length read as representative read
@@ -78,8 +80,8 @@ while [  $COUNTER -lt 4 ]; do
 	let COUNTER=COUNTER+1
 	done
 
-echo ">"$id > $outputdir/redone/$index/$id".fasta"
-grep -v ">" $outputdir/redone/$index/$id"_""$(($COUNTER))"".fasta" >> $outputdir/redone/$index/$id".fasta"
+echo ">"$id > $outputdir/redone/$index"/"$id".fasta"
+grep -v ">" $outputdir/redone/$index/$id"_""$(($COUNTER))"".fasta" >> $outputdir/redone/$index"/"$id".fasta"
 
 
 #map polished read to reference genome

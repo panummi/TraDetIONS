@@ -126,19 +126,25 @@ def main(argv):
         u = u+1
         print(a)
         name = (a[:-3])
-        pathfosample = name.split('/')[1].split('.')[0]
-        Path(outputdir + "reads_in_insertions/" + pathfosample).mkdir(parents=True, exist_ok=True)
-        namestart=a.split('/')[1].split('.')[0]
-        sample_sam=sampledir+namestart+"/"+name+"cram"
+#        pathfosample = name.split('/')[1].split('.')[0]
+        Path(outputdir + "reads_in_insertions/" + a).mkdir(parents=True, exist_ok=True)
+        sample_sam = ""
+        with open(sampledir) as samples:
+            for samp in samples:
+                if a == samp.split("\t")[0]:
+                    sample_sam=samp.split("\t")[1][:-1]
+        if sample_sam == "":
+            print("No cram file given for: " + a)
+            break
         samplesam = pysam.AlignmentFile(sample_sam, "rb")
-        reads = pysam.AlignmentFile(outputdir + name.split('/')[1] + "bam", "wb", template=samplesam)
+        reads = pysam.AlignmentFile(outputdir + a + ".bam", "wb", template=samplesam)
         vcf=VCF(inputfile, samples=a)
 
         for i, v in enumerate(vcf):	#go through insertions in sample
             if v.format('GT') != '' or v.format('AAL') != ['NAN']:
                 vID = v.ID + "."  + "txt"
-                largest_read = open(outputdir + "reads_in_insertions/" + pathfosample+ "/" + vID + "_largest.txt", "w+")
-                readnamefile = open(outputdir + "reads_in_insertions/" + pathfosample+ "/" + vID, "w+")
+                largest_read = open(outputdir + "reads_in_insertions/" + a + "/" + vID + "_largest.txt", "w+")
+                readnamefile = open(outputdir + "reads_in_insertions/" + a + "/" + vID, "w+")
                 count(v, sample_sam, window, deviance, reads, samplesam, readnamefile, largest_read)
 
 if __name__ == "__main__":

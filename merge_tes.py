@@ -212,7 +212,7 @@ def main(argv):
         sys.exit(2)
     for opt, arg in opts:
         if opt == "-h":
-            print("test.py -c <cram> -i <inputputlist> -r <fasta of repeats>"")
+            print("test.py -c <cram> -i <inputputlist> -r <fasta of repeats>")
             sys.exit()
         elif opt in ("-i"):
             inputl = arg
@@ -239,7 +239,6 @@ def main(argv):
             TE_tuples = get_info(v, TE_single, TE_cluster, retrodata)
             list_of_singles.append(TE_tuples[0])
             list_of_clusters.append(TE_tuples[1])
-            print(v.id)
 
     list_of_singles=sorted(list_of_singles, key=attrgetter('pos'))
     list_of_singles=sorted(list_of_singles, key=attrgetter('chr'))
