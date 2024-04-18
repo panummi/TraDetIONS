@@ -8,7 +8,10 @@ Example data HG002 from https://human-pangenomics.s3.amazonaws.com/index.html?pr
 
 TraDetIONS uses SVs called by Sniffles and merged with Survivor. Other dependencies are Racon and conda environment environment.yml.
 
-The tools consist of following scripts, that perform actions:
+INSTALL:
+
+git clone https://github.com/panummi/TraDetIONS.git
+
 
 EXAMPLE RUN:
 
@@ -28,9 +31,7 @@ Get TEs:
 
 bash detect_TE.sh tradetions_repo_path survivor.vcf /repepat/masker/data/hg38reps.fa data/sample.txt outputdir reference_genome.fasta racon_path TE_merge.tsv
 
+Output will be in output/TE/*
+and contain fasta file for insertions sequences, bed file for annotation of the sequences and vcf file for the variants.
 
-Get orphan transductions and Pseudogenes:
-
-bash detect_orphan_and_pseudogene.sh tradetions_repo_path survivor.vcf /repepat/masker/data/hg38reps.fa data/sample.txt polyA_outputdir reference_genome.fasta racon_path TE_merge.tsv A output/TE/TE.vcf data/Homo_sapiens.GRCh38.cdna.all.fa
-
-
+TraDetIONS might overnight on HPC cluster
