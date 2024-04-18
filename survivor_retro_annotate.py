@@ -65,8 +65,8 @@ class SnifflesSeqAnnotator(object):
             ref = variant.REF
             if ref=="N" and nucl_pat.match(alt) is not None:
                 s = alt
-            elif alt=="N" and nucl_pat.match(ref) is not None:
-                s = ref
+            #elif alt=="N" and nucl_pat.match(ref) is not None:
+            #    s = ref
             else:
                 s = ""
             yield variant,s

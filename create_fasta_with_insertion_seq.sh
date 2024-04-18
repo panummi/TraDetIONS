@@ -21,6 +21,8 @@ rm $outputdir/fastq/$id.fq
 for f in $outputdir/reads_in_insertions/*/$id.txt;	#extract supporting reads and makes a fq file
 	do
 	sample=$(echo ${f} | rev | cut -f1,2 -d '/' | rev | cut -f1 -d'/')
+	echo $outputdir
+	echo $sample
 	grep -A3 -f $f <(samtools fastq $outputdir/$sample*"_rm.bam") | sed '/^--$/d' >> $outputdir/fastq/$id.fq
 	done
 sequence=$(echo $line | cut -f5 -d' ')

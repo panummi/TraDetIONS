@@ -108,8 +108,8 @@ def main(argv):
     vcffile=VCF(inputfile)
     samples=vcffile.samples
     cont = False
-    minimum = 0
-    maximum = len(samples)-1
+    minimum = 1
+    maximum = len(samples)
     if range != "all":
         minimum = int(range.split('-')[0])
         maximum = int(range.split('-')[1])
@@ -131,8 +131,8 @@ def main(argv):
         sample_sam = ""
         with open(sampledir) as samples:
             for samp in samples:
-                if a == samp.split("\t")[0]:
-                    sample_sam=samp.split("\t")[1][:-1]
+                if a == samp.split("\t")[4]:
+                    sample_sam=samp.split("\t")[6][:-1]
         if sample_sam == "":
             print("No cram file given for: " + a)
             break
